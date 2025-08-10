@@ -57,6 +57,7 @@ The fee engine events are `fee_invoice_payment`, `fee_payment_onramp`, and `fee_
 ## Transaction Ledger + Fee Engine
 To support this whole operation, we need an atomic transaction ledger that tracks all the events and fees associated with each transaction. Each event should be logged with a timestamp, the parties involved, the amounts, and any fees assessed. An example (table) ledger might look like this:
 
+```
 | Timestamp           | Event Type          | Debit                      | Credit                      | Currency | Amount    | Description                                   |
 |---------------------|---------------------|-----------------------------|-----------------------------|----------|-----------|-----------------------------------------------|
 | 2023-10-01 12:00:00 | invoice_create      | MERCHANT_PAYABLE            | INFINITE_FEE_BANK_ACCOUNT   | USD      | 10.00     | Fee assessed to merchant (not yet collected)  |
@@ -69,9 +70,10 @@ To support this whole operation, we need an atomic transaction ledger that track
 | 2023-10-01 12:12:00 | fx_conversion       | MERCHANT_PAYABLE            | FX_CLEARING_ACCOUNT         | EUR      | 920.00    | Converted USD to EUR for merchant             |
 | 2023-10-01 12:15:00 | offramp_settlement  | MERCHANT_BANK_ACCOUNT       | MERCHANT_PAYABLE            | EUR      | 905.00    | Payout to merchant after offramp fee          |
 | 2023-10-01 12:15:00 | offramp_fee         | INFINITE_FEE_BANK_ACCOUNT   | MERCHANT_PAYABLE            | EUR      | 15.00     | Offramp fee collected from merchant           |
+```
 
 At the end of this, the final balances should be:
-
+```
 | Account                        | Currency | Final Balance |
 |--------------------------------|----------|---------------|
 | MERCHANT_BANK_ACCOUNT          | EUR      | 905.00        |
@@ -84,7 +86,7 @@ At the end of this, the final balances should be:
 | FX_CLEARING_ACCOUNT            | USD      | 0.00          |
 | INFINITE_FEE_BANK_ACCOUNT      | USD      | 10.00         |
 | INFINITE_FEE_BANK_ACCOUNT      | EUR      | 15.00         |
-
+```
 
 ## Regulatory Notes
 - **Co-mingling of Funds**: The custody wallet (`CUSTODY_WALLET`) will hold funds from multiple merchants and payers. This is a serious risk for regulatory compliance, especially in terms of KYC/AML regulations. In a production system, it would be advisable to have separate custody wallets for each merchant or recipient bank to mitigate this risk.
