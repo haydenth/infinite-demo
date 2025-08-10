@@ -1,0 +1,28 @@
+The Challenge: Cross-Border Payment API
+
+Build a REST API that demonstrates USD → multi-currency payout flow with a fee engine.
+
+Requirements:
+- Payment Flow: Accept USD, payout in user's chosen currency
+- Fee Engine: Calculate fees based on amount + destination
+- Mock Integrations:
+  - Onramp: Mock USD collection (Stripe/Circle/onramp provider of you choice)
+  - Offramp: Mock stablecoin → local currency payout
+  - Idempotency: Handle duplicate payment requests
+  - Events: Basic webhook handling for async updates
+  - Deliverables:
+    - Working code (your preferred language)
+    - README with setup instructions
+    - Short notes on production scaling approach
+
+We're Evaluating:
+- API design and payment flow orchestration
+- Understanding of onramp/offramp architecture
+- How you'd handle this at scale
+- Code quality and AI tool usage
+- Please share your GitHub repo - no hard deadline, but ideally within a week. Once you're ready, please book a time to present your solution here: https://cal.com/rajlad/take-home
+
+Feel free to reach out if you have any questions about the assessment!
+Looking forward to seeing your work!
+Best,
+Raj

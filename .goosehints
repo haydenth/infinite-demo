@@ -1,0 +1,64 @@
+# Cross-Border Payment API - Goose Development Hints
+
+## Project Overview
+This is a coding test for infinite.dev to build a REST API demonstrating USD → multi-currency payout flow with fee engine.
+
+## Key Requirements to Address
+- **Payment Flow**: Accept USD, payout in user's chosen currency
+- **Fee Engine**: Calculate fees based on amount + destination
+- **Mock Integrations**: Onramp (USD collection), Offramp (stablecoin → local currency)
+- **Idempotency**: Handle duplicate payment requests
+- **Events**: Basic webhook handling for async updates
+
+## Architecture Considerations
+- API design and payment flow orchestration
+- Understanding of onramp/offramp architecture
+- Scalability approach
+- Code quality
+
+## Technical Decisions Needed
+- [ ] Programming language selection
+- [ ] Framework choice
+- [ ] Database selection
+- [ ] Mock integration approach
+- [ ] API structure and endpoints
+- [ ] Fee calculation logic
+- [ ] Idempotency implementation strategy
+- [ ] Event/webhook system design
+- [ ] Error handling approach
+- [ ] Testing strategy
+
+## Deliverables Required
+- [ ] Working code implementation
+- [ ] README with setup instructions
+- [ ] Short notes on production scaling approach
+- [ ] GitHub repository ready for presentation
+
+## Development Guidelines
+- Focus on clean API design
+- Demonstrate understanding of payment flow orchestration
+- Show scalability considerations
+- Maintain high code quality
+- Document decisions and trade-offs
+
+## Evaluation Criteria
+The solution will be evaluated on:
+1. API design and payment flow orchestration
+2. Understanding of onramp/offramp architecture
+3. Scalability approach
+4. Code quality and AI tool usage
+
+## Next Steps
+1. Choose technology stack
+2. Design API endpoints
+3. Implement core payment flow
+4. Add fee engine
+5. Implement mock integrations
+6. Add idempotency handling
+7. Implement webhook system
+8. Write comprehensive README
+9. Document scaling approach
+10. Prepare for presentation
+
+## Presentation
+Schedule presentation at: https://cal.com/rajlad/take-home
