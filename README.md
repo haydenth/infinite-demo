@@ -12,6 +12,7 @@
 - **Infinite Fee Revenue Bank Account (`INFINITE_FEE_BANK_ACCOUNT`)**: A US bank account that holds fees collected from the payer and merchant. 
 - **Infinite Custody Wallet (`CUSTODY_WALLET`)**: A wallet that holds the stablecoins (USDC) and is used to facilitate the transfer of funds between the merchant and payer. This wallet is managed by us and is used to hold custody of funds during transfer. Practically, it might make sense to have a separate custody wallet for each merchant (privacy issues) or with each receipient bank (e.g. one for EUR, one for GBP, etc.). This wallet is used to hold the stablecoins during the transfer process.
 - **Stripe Clearing Account (`STRIPE_CLEARING_ACCOUNT`)**: A Stripe account that holds the funds during the payment process. This account is used to hold the funds until they are transferred to the `INFINITE_BANK_ACCOUNT`.
+- **Mocked Off-ramp Provider (`OFFRAMP_CLEARING_ACCOUNT`)**: A mocked off-ramp provider that simulates the process of converting USDC to the merchant's native currency and sending it to their bank account. In a real-world scenario, this would involve using a service like Fireblocks, Circle, or similar to handle the conversion and transfer.
 
 
 ## Payment Events 
@@ -61,15 +62,13 @@ To support this whole operation, we need an atomic transaction ledger that track
 | Timestamp           | Event Type          | Debit                      | Credit                      | Currency | Amount    | Description                                   |
 |---------------------|---------------------|-----------------------------|-----------------------------|----------|-----------|-----------------------------------------------|
 | 2023-10-01 12:00:00 | invoice_create      | MERCHANT_PAYABLE            | INFINITE_FEE_BANK_ACCOUNT   | USD      | 10.00     | Fee assessed to merchant (not yet collected)  |
-| 2023-10-01 12:00:00 | invoice_create      | PAYER_RECEIVABLE            | MERCHANT_PAYABLE            | USD      | 1000.00   | Invoice issued for Work Order #12345          |
-| 2023-10-01 12:05:00 | invoice_payment     | STRIPE_CLEARING_ACCOUNT     | PAYER_RECEIVABLE            | USD      | 1000.00   | Payer submits payment via Stripe              |
-| 2023-10-01 12:06:00 | stripe_settlement   | INFINITE_BANK_ACCOUNT       | STRIPE_CLEARING_ACCOUNT     | USD      | 1000.00   | Stripe settles funds to Infinite              |
-| 2023-10-01 12:10:00 | payment_onramp      | CUSTODY_WALLET              | INFINITE_BANK_ACCOUNT       | USD      | 1000.00   | Infinite converts fiat to USDC                |
-| 2023-10-01 12:10:00 | payment_onramp_fee  | INFINITE_FEE_BANK_ACCOUNT   | CUSTODY_WALLET              | USD      | 10.00     | Collection of previously assessed invoice fee |
-| 2023-10-01 12:12:00 | fx_conversion       | FX_CLEARING_ACCOUNT         | CUSTODY_WALLET              | USD      | 990.00    | Move USDC to FX/offramp engine                 |
-| 2023-10-01 12:12:00 | fx_conversion       | MERCHANT_PAYABLE            | FX_CLEARING_ACCOUNT         | EUR      | 920.00    | Converted USD to EUR for merchant             |
-| 2023-10-01 12:15:00 | offramp_settlement  | MERCHANT_BANK_ACCOUNT       | MERCHANT_PAYABLE            | EUR      | 905.00    | Payout to merchant after offramp fee          |
-| 2023-10-01 12:15:00 | offramp_fee         | INFINITE_FEE_BANK_ACCOUNT   | MERCHANT_PAYABLE            | EUR      | 15.00     | Offramp fee collected from merchant           |
+| 2023-10-01 12:00:00 | invoice_create      | PAYER_RECEIVABLE            | INFINITE_FEE_BANK_ACCOUNT   | USD      | 15.00     | Fee assessed to payer (not yet collected)     |
+| 2023-10-01 12:05:00 | invoice_payment     | PAYER_BANK_ACCOUNT          | STRIPE_CLEARING_ACCOUNT     | USD      | 1000.00   | Payment received from payer                   |
+| 2023-10-01 12:05:00 | invoice_payment     | STRIPE_CLEARING_ACCOUNT     | INFINITE_BANK_ACCOUNT       | USD      | 1000.00   | Funds transferred to Infinite Bank Account    |
+| 2023-10-01 12:10:00 | payment_onramp      | INFINITE_BANK_ACCOUNT       | CUSTODY_WALLET              | USD      | 1000.00   | Purchase of USDC from Infinite Bank Account   |
+| 2023-10-01 12:15:00 | fee_payment_onramp  | INFINITE_FEE_BANK_ACCOUNT   | CUSTODY_WALLET              | USD      | 15.00     | Fee assessed to merchant for onramp           |
+| 2023-10-01 12:20:00 | stablecoin_offramp  | CUSTODY_WALLET              | MERCHANT_BANK_ACCOUNT       | EUR      | 905.00    | Offramp USDC to merchant's bank account       |
+| 2023-10-01 12:20:00 | fee_stablecoin_offramp | INFINITE_FEE_BANK_ACCOUNT | MERCHANT_PAYABLE            | EUR      | 15.00     | Fee assessed to merchant for offramp          |
 ```
 
 At the end of this, the final balances should be:
@@ -83,7 +82,7 @@ At the end of this, the final balances should be:
 | STRIPE_CLEARING_ACCOUNT        | USD      | 0.00          |
 | INFINITE_BANK_ACCOUNT          | USD      | 0.00          |
 | CUSTODY_WALLET                 | USD      | 0.00          |
-| FX_CLEARING_ACCOUNT            | USD      | 0.00          |
+| OFFRAMP_CLEARING_ACCOUNT       | USD      | 0.00          |
 | INFINITE_FEE_BANK_ACCOUNT      | USD      | 10.00         |
 | INFINITE_FEE_BANK_ACCOUNT      | EUR      | 15.00         |
 ```
