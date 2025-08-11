@@ -55,37 +55,120 @@ And we need to be able to assess these fees against either the payer or the merc
 
 The fee engine events are `fee_invoice_payment`, `fee_payment_onramp`, and `fee_stablecoin_offramp`. Each event should log the fee amount, the party it was assessed against, and the timestamp of the fee assessment.
 
-## Transaction Ledger + Fee Engine
-To support this whole operation, we need an atomic transaction ledger that tracks all the events and fees associated with each transaction. Each event should be logged with a timestamp, the parties involved, the amounts, and any fees assessed. An example (table) ledger might look like this:
+## Double-Entry Accounting System + Fee Engine
+
+### Core Principles
+1. **Every transaction must balance** - Total debits = Total credits
+2. **Currency conversions are explicit transactions** with clear exchange rates
+3. **Fees are collected atomically** with the triggering event, not pre-assessed
+4. **Clear separation** between operational accounts and fee revenue accounts
+5. **Transaction state management** with proper rollback capability
+
+### Account Structure
+
+#### Operational Accounts
+- `PAYER_BANK_ACCOUNT` - Payer's USD bank account
+- `INFINITE_USD_BANK` - Our USD operating account (receives from Stripe)
+- `INFINITE_CUSTODY_USDC` - Our USDC wallet for cross-border transfers
+- `MERCHANT_OFFRAMP_USDC` - Merchant-specific USDC account for offramp
+- `MERCHANT_BANK_ACCOUNT` - Merchant's local currency bank account
+- `STRIPE_CLEARING` - Stripe's clearing account
+- `STRIPE_FEE_EXPENSE` - Stripe processing fees expense
+
+#### Fee Revenue Accounts
+- `FEE_REVENUE_USD` - USD fees collected
+- `FEE_REVENUE_USDC` - USDC fees collected
+- `FEE_REVENUE_EUR` - EUR fees collected (per currency)
+
+#### Suspense/Working Accounts
+- `CURRENCY_EXCHANGE_SUSPENSE` - Temporary account for conversion calculations
+- `TRANSACTION_IN_PROGRESS` - Holds funds during multi-step processes
+
+### Transaction Flow with Proper Double-Entry Accounting
+
+#### Event 1: Invoice Payment ($1000 USD + $5 Fee)
+**Fee: $5 flat fee charged to payer on top of invoice amount**
+**Stripe Fee: $29.45 ($0.30 + 2.9% of $1005) - owed to Stripe**
+
+**⚠️ Compliance Note**: This flow violates Stripe's Terms of Service since we're not the merchant of record for the underlying transaction. In production, this would require:
+- Proper merchant onboarding and KYC
+- Stripe Connect or marketplace setup
+- Alternative payment processors designed for this use case
+- Direct bank integration bypassing card networks entirely
+*This is a coding demonstration only - real implementation would need compliant payment collection!!*
 
 ```
-| Timestamp           | Event Type          | Debit                      | Credit                      | Currency | Amount    | Description                                   |
-|---------------------|---------------------|-----------------------------|-----------------------------|----------|-----------|-----------------------------------------------|
-| 2023-10-01 12:00:00 | invoice_create      | MERCHANT_PAYABLE            | INFINITE_FEE_BANK_ACCOUNT   | USD      | 10.00     | Fee assessed to merchant (not yet collected)  |
-| 2023-10-01 12:00:00 | invoice_create      | PAYER_RECEIVABLE            | INFINITE_FEE_BANK_ACCOUNT   | USD      | 15.00     | Fee assessed to payer (not yet collected)     |
-| 2023-10-01 12:05:00 | invoice_payment     | PAYER_BANK_ACCOUNT          | STRIPE_CLEARING_ACCOUNT     | USD      | 1000.00   | Payment received from payer                   |
-| 2023-10-01 12:05:00 | invoice_payment     | STRIPE_CLEARING_ACCOUNT     | INFINITE_BANK_ACCOUNT       | USD      | 1000.00   | Funds transferred to Infinite Bank Account    |
-| 2023-10-01 12:10:00 | payment_onramp      | INFINITE_BANK_ACCOUNT       | CUSTODY_WALLET              | USD      | 1000.00   | Purchase of USDC from Infinite Bank Account   |
-| 2023-10-01 12:15:00 | fee_payment_onramp  | INFINITE_FEE_BANK_ACCOUNT   | CUSTODY_WALLET              | USD      | 15.00     | Fee assessed to merchant for onramp           |
-| 2023-10-01 12:20:00 | stablecoin_offramp  | CUSTODY_WALLET              | MERCHANT_BANK_ACCOUNT       | EUR      | 905.00    | Offramp USDC to merchant's bank account       |
-| 2023-10-01 12:20:00 | fee_stablecoin_offramp | INFINITE_FEE_BANK_ACCOUNT | MERCHANT_PAYABLE            | EUR      | 15.00     | Fee assessed to merchant for offramp          |
+| Timestamp           | Debit                    | Credit              | Amount | Currency | Description                    |
+|---------------------|--------------------------|---------------------|--------|----------|--------------------------------|
+| 2023-10-01 12:05:00 | STRIPE_CLEARING          | PAYER_BANK_ACCOUNT  | 1005   | USD      | Payment + fee received via Stripe |
+| 2023-10-01 12:05:00 | STRIPE_FEE_EXPENSE       | STRIPE_CLEARING     | 29.45  | USD      | Stripe processing fees ($0.30 + 2.9%) |
+| 2023-10-01 12:05:00 | FEE_REVENUE_USD          | STRIPE_CLEARING     | 5      | USD      | Our payment processing fee     |
+| 2023-10-01 12:05:00 | INFINITE_USD_BANK        | STRIPE_CLEARING     | 970.55 | USD      | Net amount after Stripe fees  |
+```
+**Balance Check**: 1005 = 29.45 + 5 + 970.55 ✓
+
+#### Event 2: USD to USDC Conversion
+**Fee: $1.00 (0.1% of invoice amount) assessed to merchant**
+**Exchange Rate: 1 USD = 1 USDC**
+
+```
+| Timestamp           | Debit                       | Credit                | Amount | Currency | Description                        |
+|---------------------|-----------------------------|-----------------------|--------|----------|------------------------------------|
+| 2023-10-01 12:10:00 | FEE_REVENUE_USD             | INFINITE_USD_BANK     | 1.00   | USD      | Onramp fee (0.1% of 1000)        |
+| 2023-10-01 12:10:00 | INFINITE_CUSTODY_USDC       | INFINITE_USD_BANK     | 969.55 | USDC     | USD converted to USDC (969.55 * 1.0) |
+```
+**Balance Check**: 970.55 = 1.00 + 969.55 ✓
+
+#### Event 3: Transfer to Merchant Offramp Account
+**Fee: $1 USDC transfer fee assessed to merchant**
+**Prepare merchant-specific USDC for offramp**
+
+```
+| Timestamp           | Debit                       | Credit                | Amount | Currency | Description                        |
+|---------------------|-----------------------------|-----------------------|--------|----------|------------------------------------|
+| 2023-10-01 12:15:00 | FEE_REVENUE_USDC            | INFINITE_CUSTODY_USDC | 1      | USDC     | Transfer fee (1 USDC)             |
+| 2023-10-01 12:15:00 | MERCHANT_OFFRAMP_USDC       | INFINITE_CUSTODY_USDC | 968.55 | USDC     | Net transfer to merchant offramp account |
+```
+**Balance Check**: 969.55 = 1 + 968.55 ✓
+
+#### Event 4: USDC to EUR Conversion & Payout
+**Exchange Rate: 1 USDC = 0.86 EUR as of 8/11/2025 (including theoretical offramp provider fees and spread)**
+**Net to merchant: 968.55 USDC → €832.95**
+
+**Design Notes**: 
+1. **Offramp Provider Fees**: Real offramp providers (Circle, Fireblocks, etc.) charge additional fees beyond the exchange rate spread, but these are provider-specific and excluded from this demo for simplicity. In theory, you'd want to track that and have a line item for that.
+2. **No Additional Platform Fees**: I've intentionally chosen not to charge additional fees at the offramp stage to maintain accounting simplicity and keep all our platform fees denominated in USD/USDC rather than dealing with multi-currency fee revenue tracking.
+
+```
+| Timestamp           | Debit                      | Credit                  | Amount | Currency | Description                      |
+|---------------------|----------------------------|-------------------------|--------|----------|----------------------------------|
+| 2023-10-01 12:20:00 | MERCHANT_BANK_ACCOUNT      | MERCHANT_OFFRAMP_USDC   | 832.95 | EUR      | USDC offramped to EUR (968.55 * 0.86) |
+```
+**Balance Check**: 968.55 USDC → 832.95 EUR at rate ✓
+
+### Final Account Balances
+
+```
+| Account                     | Currency | Balance  | Notes                           |
+|----------------------------|----------|----------|---------------------------------|
+| PAYER_BANK_ACCOUNT         | USD      | -1005.00 | Paid $1000 invoice + $5 fee     |
+| MERCHANT_BANK_ACCOUNT      | EUR      | +832.95  | Received €832.95 payout         |
+| FEE_REVENUE_USD            | USD      | +6.00    | Revenue: $5 payment + $1 onramp |
+| FEE_REVENUE_USDC           | USDC     | +1.00    | Revenue: $1 USDC transfer fee   |
+| STRIPE_FEE_EXPENSE         | USD      | +29.45   | Stripe processing fee expense   |
+| STRIPE_CLEARING            | USD      | 0.00     | Cleared                         |
+| INFINITE_USD_BANK          | USD      | 0.00     | Cleared                         |
+| INFINITE_CUSTODY_USDC      | USDC     | 0.00     | Cleared                         |
+| MERCHANT_OFFRAMP_USDC      | USDC     | 0.00     | Cleared                         |
 ```
 
-At the end of this, the final balances should be:
-```
-| Account                        | Currency | Final Balance |
-|--------------------------------|----------|---------------|
-| MERCHANT_BANK_ACCOUNT          | EUR      | 905.00        |
-| MERCHANT_PAYABLE               | EUR      | 0.00          |
-| PAYER_BANK_ACCOUNT             | USD      | -1000.00      |
-| PAYER_RECEIVABLE               | USD      | 0.00          |
-| STRIPE_CLEARING_ACCOUNT        | USD      | 0.00          |
-| INFINITE_BANK_ACCOUNT          | USD      | 0.00          |
-| CUSTODY_WALLET                 | USD      | 0.00          |
-| OFFRAMP_CLEARING_ACCOUNT       | USD      | 0.00          |
-| INFINITE_FEE_BANK_ACCOUNT      | USD      | 10.00         |
-| INFINITE_FEE_BANK_ACCOUNT      | EUR      | 15.00         |
-```
+### Key Improvements
+- **Perfect Balance**: Every transaction balances completely with explicit exchange rates
+- **Atomic Fee Collection**: Fees are collected during the actual transaction, not pre-assessed
+- **Clear Currency Conversions**: Exchange rates are explicit with dedicated suspense accounts
+- **Rollback Capability**: Each step can be reversed by creating offsetting entries
+- **Audit Trail**: Every movement of funds is tracked with clear descriptions
+- **Separation of Concerns**: Fee revenue is separate from operational accounts
 
 ## Regulatory Notes
 - **Co-mingling of Funds**: The custody wallet (`CUSTODY_WALLET`) will hold funds from multiple merchants and payers. This is a serious risk for regulatory compliance, especially in terms of KYC/AML regulations. In a production system, it would be advisable to have separate custody wallets for each merchant or recipient bank to mitigate this risk.
