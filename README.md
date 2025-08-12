@@ -1,60 +1,3 @@
-
-## Parties and Wallets
-
-- **Merchant**: The user who initiates the invoice request and is the recipient of the payment. They have a native currency that may not be in USD. This user has the following accounts:
-  - **Bank Account (`MERCHANT_BANK_ACCOUNT`)**: A non-US bank account attached to payment credentials (visible to us) that will receive offramped funds
-  - **Merchant Payable (`MERCHANT_PAYABLE`)**: A payable account that holds the amount due to the merchant in their native currency. 
-- **Payer**: The user who receives the invoice and makes the payment. They will pay in USD, but the merchant may want to receive the payment in a different currency.
-  - **Bank Account (`PAYER_BANK_ACCOUNT`)**: A US bank account attached to payment credentials (invisible to us) used to onramp funds
-  - **Payer Receivable (`PAYER_RECEIVABLE`)**: A receivable account that holds the amount due from the payer in USD.
-- **Stripe Payment Processing**: The service that handles the payment transactions: Stripe
-- **Infinite Custody Bank Account (`INFINITE_BANK_ACCOUNT`)**: A US bank account that holds USD and is used to facilitate the transfer of funds between the merchant and payer. This account is managed by us and is used to hold custody of funds during transfer.
-- **Infinite Fee Revenue Bank Account (`INFINITE_FEE_BANK_ACCOUNT`)**: A US bank account that holds fees collected from the payer and merchant. 
-- **Infinite Custody Wallet (`CUSTODY_WALLET`)**: A wallet that holds the stablecoins (USDC) and is used to facilitate the transfer of funds between the merchant and payer. This wallet is managed by us and is used to hold custody of funds during transfer. Practically, it might make sense to have a separate custody wallet for each merchant (privacy issues) or with each receipient bank (e.g. one for EUR, one for GBP, etc.). This wallet is used to hold the stablecoins during the transfer process.
-- **Stripe Clearing Account (`STRIPE_CLEARING_ACCOUNT`)**: A Stripe account that holds the funds during the payment process. This account is used to hold the funds until they are transferred to the `INFINITE_BANK_ACCOUNT`.
-- **Mocked Off-ramp Provider (`OFFRAMP_CLEARING_ACCOUNT`)**: A mocked off-ramp provider that simulates the process of converting USDC to the merchant's native currency and sending it to their bank account. In a real-world scenario, this would involve using a service like Fireblocks, Circle, or similar to handle the conversion and transfer.
-
-
-## Payment Events 
-
-### 1) Invoice Creation (`invoice_create`)
-The merchant initiates an invoice request that includes the following. All invoice currency is USD, even if the Merchant is in a different currency. The invoice request is sent to the payer via email or other communication channels. The invoice request includes the following details:
-
-```json
-{
-  "amount": 1000,
-  "currency": "USD",
-  "description": "Payment for Work Order #12345",
-  "customer_id": "cust_67890"
-}
-```
-
-### 2) Invoice Payment (`invoice_payment`)
-The user sends the invoice to the payer via email or other communication channels. The payer receives a link to view and pay the invoice.  The payer clicks the link in the invoice and is directed to a secure payment page. The payer selects their preferred payment method (credit card, bank transfer, etc.) and enters the required payment details. This will go through Stripe and funds will be deposited into the `INFINITE_BANK_ACCOUNT`. Note: I think this is probably in violation of Stripe's TOS since we're not the actual merchant of record here, so there are some compliance issues to work through for this in production.
-
-### 3) Payment Onramp (USD) (`payment_onramp`)
-At least in theory (ignoring settlement delays and MTL compliance) we'll have our US bank account funded with USD. At this point, we need to go out an make a purchase of USDC. To keep it simple this is done by making a purchase of USDC on a centralized exchange. It is then held in the custody wallet (`CUSTODY_WALLET`) where it is comingled with other funds (note: this is a bad idea but we're trying to get a simple demo here, not a final production product). 
-
-We may also need to assess fees at this point as well. In fact, this is probably the final place where we may wish to assess fees since we can keep them in our `INFINITE_BANK_ACCOUNT` and not have to worry about them being in the custody wallet.
-
-### 4) Stablecoin Offramp (Native Currency) (`stablecoin_offramp`)
-At this point, the merchant has a bank account in their native currency `MERCHANT_BANK_ACCOUNT`. We need to offramp the USDC to the merchant's bank account. This is done by using a mocked offramp service that simulates the process of converting USDC to the merchant's native currency and sending it to their bank account. In a real-world scenario, this would involve using a service like Fireblocks, Circle, or similar to handle the conversion and transfer. This is probably the hardest and riskiest part of the entire exchange.
-
-## Fee Engine
-We need to have a pretty flexibile fee engine that can assess fees at different points along the process. The engine needs to support:
-
-- Flat fees (e.g. $1.00 per transaction)
-- Percentage fees (e.g. 1.5% of the transaction amount)
-- Hybrid fees (e.g. $0.30 + 2.9% of the transaction amount)
-- Tiered fees (in a future version)
-
-And we need to be able to assess these fees against either the payer or the merchant.
-- `invoice_payment`: Assess fees against the payer. Example: $0.30 + 2.9% of the transaction amount
-- `payment_onramp`: Assess fees against the merchant. Example: 1.5% of the transaction amount. (This is the equivalent to say, a SWIFT fee part 1)
-- `stablecoin_offramp`: Assess fees against the merchant. Example: $1.00 flat fee (This is the equivalent to say, a SWIFT fee part 2)
-
-The fee engine events are `fee_invoice_payment`, `fee_payment_onramp`, and `fee_stablecoin_offramp`. Each event should log the fee amount, the party it was assessed against, and the timestamp of the fee assessment.
-
 ## Double-Entry Accounting System + Fee Engine
 
 ### Core Principles
@@ -78,7 +21,6 @@ The fee engine events are `fee_invoice_payment`, `fee_payment_onramp`, and `fee_
 #### Fee Revenue Accounts
 - `FEE_REVENUE_USD` - USD fees collected
 - `FEE_REVENUE_USDC` - USDC fees collected
-- `FEE_REVENUE_EUR` - EUR fees collected (per currency)
 
 #### Suspense/Working Accounts
 - `CURRENCY_EXCHANGE_SUSPENSE` - Temporary account for conversion calculations
@@ -97,38 +39,66 @@ The fee engine events are `fee_invoice_payment`, `fee_payment_onramp`, and `fee_
 - Direct bank integration bypassing card networks entirely
 *This is a coding demonstration only - real implementation would need compliant payment collection!!*
 
+**Journal Entry Format:**
 ```
-| Timestamp           | Debit                    | Credit              | Amount | Currency | Description                    |
-|---------------------|--------------------------|---------------------|--------|----------|--------------------------------|
-| 2023-10-01 12:05:00 | STRIPE_CLEARING          | PAYER_BANK_ACCOUNT  | 1005   | USD      | Payment + fee received via Stripe |
-| 2023-10-01 12:05:00 | STRIPE_FEE_EXPENSE       | STRIPE_CLEARING     | 29.45  | USD      | Stripe processing fees ($0.30 + 2.9%) |
-| 2023-10-01 12:05:00 | FEE_REVENUE_USD          | STRIPE_CLEARING     | 5      | USD      | Our payment processing fee     |
-| 2023-10-01 12:05:00 | INFINITE_USD_BANK        | STRIPE_CLEARING     | 970.55 | USD      | Net amount after Stripe fees  |
+Dr STRIPE_CLEARING          1,005.00 USD   (asset ↑, payment received from payer)
+    Cr EXTERNAL_PAYER             1,005.00 USD   (off-books, payer's payment)
+
+Dr STRIPE_FEE_EXPENSE          29.45 USD   (expense ↑, Stripe processing fees)
+Dr INFINITE_USD_BANK          970.55 USD   (asset ↑, net funds to our account)
+    Cr FEE_REVENUE_USD            5.00 USD   (revenue ↑, our payment processing fee)
+    Cr STRIPE_CLEARING        1,005.00 USD   (asset ↓, funds cleared from Stripe)
 ```
+
+**Transaction Table Format:**
+| txn_id | account                | debit_amount | credit_amount | currency | description |
+|--------|------------------------|--------------|---------------|----------|-------------|
+| tx_001 | STRIPE_CLEARING        | 1005.00      | 0.00          | USD      | Payment received from payer |
+| tx_001 | STRIPE_FEE_EXPENSE     | 29.45        | 0.00          | USD      | Stripe processing fees |
+| tx_001 | INFINITE_USD_BANK      | 970.55       | 0.00          | USD      | Net funds to our account |
+| tx_001 | FEE_REVENUE_USD        | 0.00         | 5.00          | USD      | Our payment processing fee |
+| tx_001 | STRIPE_CLEARING        | 0.00         | 1005.00       | USD      | Funds cleared from Stripe |
+
 **Balance Check**: 1005 = 29.45 + 5 + 970.55 ✓
 
 #### Event 2: USD to USDC Conversion
 **Fee: $1.00 (0.1% of invoice amount) assessed to merchant**
 **Exchange Rate: 1 USD = 1 USDC**
 
+**Journal Entry Format:**
 ```
-| Timestamp           | Debit                       | Credit                | Amount | Currency | Description                        |
-|---------------------|-----------------------------|-----------------------|--------|----------|------------------------------------|
-| 2023-10-01 12:10:00 | FEE_REVENUE_USD             | INFINITE_USD_BANK     | 1.00   | USD      | Onramp fee (0.1% of 1000)        |
-| 2023-10-01 12:10:00 | INFINITE_CUSTODY_USDC       | INFINITE_USD_BANK     | 969.55 | USDC     | USD converted to USDC (969.55 * 1.0) |
+Dr INFINITE_CUSTODY_USDC      969.55 USDC  (asset ↑, USDC acquired from USD conversion)
+    Cr FEE_REVENUE_USD            1.00 USD   (revenue ↑, onramp fee)
+    Cr INFINITE_USD_BANK        970.55 USD   (asset ↓, USD converted + fee collected)
 ```
+
+**Transaction Table Format:**
+| txn_id | account                | debit_amount | credit_amount | currency | description |
+|--------|------------------------|--------------|---------------|----------|-------------|
+| tx_002 | INFINITE_CUSTODY_USDC  | 969.55       | 0.00          | USDC     | USDC acquired from USD conversion |
+| tx_002 | FEE_REVENUE_USD        | 0.00         | 1.00          | USD      | Onramp fee |
+| tx_002 | INFINITE_USD_BANK      | 0.00         | 970.55        | USD      | USD converted + fee collected |
+
 **Balance Check**: 970.55 = 1.00 + 969.55 ✓
 
 #### Event 3: Transfer to Merchant Offramp Account
 **Fee: $1 USDC transfer fee assessed to merchant**
 **Prepare merchant-specific USDC for offramp**
 
+**Journal Entry Format:**
 ```
-| Timestamp           | Debit                       | Credit                | Amount | Currency | Description                        |
-|---------------------|-----------------------------|-----------------------|--------|----------|------------------------------------|
-| 2023-10-01 12:15:00 | FEE_REVENUE_USDC            | INFINITE_CUSTODY_USDC | 1      | USDC     | Transfer fee (1 USDC)             |
-| 2023-10-01 12:15:00 | MERCHANT_OFFRAMP_USDC       | INFINITE_CUSTODY_USDC | 968.55 | USDC     | Net transfer to merchant offramp account |
+Dr MERCHANT_OFFRAMP_USDC      968.55 USDC  (asset ↑, USDC allocated to merchant)
+    Cr FEE_REVENUE_USDC          1.00 USDC  (revenue ↑, transfer fee)
+    Cr INFINITE_CUSTODY_USDC    969.55 USDC  (asset ↓, USDC transferred + fee)
 ```
+
+**Transaction Table Format:**
+| txn_id | account                  | debit_amount | credit_amount | currency | description |
+|--------|--------------------------|--------------|---------------|----------|-------------|
+| tx_003 | MERCHANT_OFFRAMP_USDC    | 968.55       | 0.00          | USDC     | USDC allocated to merchant |
+| tx_003 | FEE_REVENUE_USDC         | 0.00         | 1.00          | USDC     | Transfer fee |
+| tx_003 | INFINITE_CUSTODY_USDC    | 0.00         | 969.55        | USDC     | USDC transferred + fee |
+
 **Balance Check**: 969.55 = 1 + 968.55 ✓
 
 #### Event 4: USDC to EUR Conversion & Payout
@@ -139,11 +109,18 @@ The fee engine events are `fee_invoice_payment`, `fee_payment_onramp`, and `fee_
 1. **Offramp Provider Fees**: Real offramp providers (Circle, Fireblocks, etc.) charge additional fees beyond the exchange rate spread, but these are provider-specific and excluded from this demo for simplicity. In theory, you'd want to track that and have a line item for that.
 2. **No Additional Platform Fees**: I've intentionally chosen not to charge additional fees at the offramp stage to maintain accounting simplicity and keep all our platform fees denominated in USD/USDC rather than dealing with multi-currency fee revenue tracking.
 
+**Journal Entry Format:**
 ```
-| Timestamp           | Debit                      | Credit                  | Amount | Currency | Description                      |
-|---------------------|----------------------------|-------------------------|--------|----------|----------------------------------|
-| 2023-10-01 12:20:00 | MERCHANT_BANK_ACCOUNT      | MERCHANT_OFFRAMP_USDC   | 832.95 | EUR      | USDC offramped to EUR (968.55 * 0.86) |
+Dr MERCHANT_BANK_ACCOUNT      832.95 EUR   (asset ↑, EUR received from offramp)
+    Cr MERCHANT_OFFRAMP_USDC    968.55 USDC  (asset ↓, USDC offramped to EUR)
 ```
+
+**Transaction Table Format:**
+| txn_id | account                  | debit_amount | credit_amount | currency | description |
+|--------|--------------------------|--------------|---------------|----------|-------------|
+| tx_004 | MERCHANT_BANK_ACCOUNT    | 832.95       | 0.00          | EUR      | EUR received from offramp |
+| tx_004 | MERCHANT_OFFRAMP_USDC    | 0.00         | 968.55        | USDC     | USDC offramped to EUR |
+
 **Balance Check**: 968.55 USDC → 832.95 EUR at rate ✓
 
 ### Final Account Balances
@@ -162,13 +139,128 @@ The fee engine events are `fee_invoice_payment`, `fee_payment_onramp`, and `fee_
 | MERCHANT_OFFRAMP_USDC      | USDC     | 0.00     | Cleared                         |
 ```
 
-### Key Improvements
-- **Perfect Balance**: Every transaction balances completely with explicit exchange rates
-- **Atomic Fee Collection**: Fees are collected during the actual transaction, not pre-assessed
-- **Clear Currency Conversions**: Exchange rates are explicit with dedicated suspense accounts
-- **Rollback Capability**: Each step can be reversed by creating offsetting entries
-- **Audit Trail**: Every movement of funds is tracked with clear descriptions
-- **Separation of Concerns**: Fee revenue is separate from operational accounts
+## Payment Events Index
+
+The following events are emitted during the cross-border payment flow, tied directly to our transaction stages:
+
+### Transaction-Based Events
+
+Each event corresponds to a completed transaction in our double-entry accounting system:
+
+#### **Event 1: `payment.collected`**
+- **Trigger**: Completion of Transaction `tx_001` (Invoice Payment)
+- **Payload**: 
+  ```json
+  {
+    "payment_id": "pay_1234567890",
+    "transaction_id": "tx_001",
+    "gross_amount": "1005.00 USD",
+    "stripe_fee": "29.45 USD", 
+    "our_fee": "5.00 USD",
+    "net_received": "970.55 USD",
+    "stripe_transaction_id": "pi_1234567890"
+  }
+  ```
+- **Status**: `collected`
+
+#### **Event 2: `onramp.converted`** 
+- **Trigger**: Completion of Transaction `tx_002` (USD to USDC Conversion)
+- **Payload**:
+  ```json
+  {
+    "payment_id": "pay_1234567890", 
+    "transaction_id": "tx_002",
+    "usd_amount": "970.55 USD",
+    "usdc_received": "969.55 USDC",
+    "exchange_rate": "1.00000",
+    "onramp_fee": "1.00 USD"
+  }
+  ```
+- **Status**: `converted`
+
+#### **Event 3: `custody.transferred`**
+- **Trigger**: Completion of Transaction `tx_003` (Transfer to Merchant Offramp Account)
+- **Payload**:
+  ```json
+  {
+    "payment_id": "pay_1234567890",
+    "transaction_id": "tx_003", 
+    "usdc_transferred": "969.55 USDC",
+    "transfer_fee": "1.00 USDC",
+    "net_to_offramp": "968.55 USDC",
+    "merchant_offramp_account": "mer_offramp_1234567890"
+  }
+  ```
+- **Status**: `transferred`
+
+#### **Event 4: `payout.completed`**
+- **Trigger**: Completion of Transaction `tx_004` (USDC to EUR Conversion & Payout)
+- **Payload**:
+  ```json
+  {
+    "payment_id": "pay_1234567890",
+    "transaction_id": "tx_004",
+    "usdc_amount": "968.55 USDC",
+    "final_amount": "832.95 EUR", 
+    "exchange_rate": "0.86000",
+    "merchant_bank_reference": "bnk_ref_1234567890"
+  }
+  ```
+- **Status**: `completed`
+
+#### **Event 5: `payment.completed`**
+- **Trigger**: All transactions completed successfully
+- **Payload**: Complete payment summary
+  ```json
+  {
+    "payment_id": "pay_1234567890",
+    "original_amount": "1000.00 USD",
+    "total_fees_collected": "7.00 USD + 1.00 USDC",
+    "final_payout": "832.95 EUR",
+    "completion_time": "2025-08-12T17:02:45Z",
+    "transaction_ids": ["tx_001", "tx_002", "tx_003", "tx_004"]
+  }
+  ```
+- **Status**: `completed`
+
+### Event Payload Schema
+
+Each event follows this standard structure:
+```json
+{
+  "event_id": "evt_1234567890",
+  "event_type": "payment.collection.succeeded",
+  "created_at": "2025-08-12T16:58:45Z",
+  "payment_id": "pay_1234567890",
+  "merchant_id": "mer_1234567890",
+  "data": {
+    // Event-specific payload data
+  },
+  "metadata": {
+    "idempotency_key": "unique_key_123",
+    "source_ip": "192.168.1.1",
+    "user_agent": "API Client v1.0"
+  }
+}
+```
+
+### Webhook Configuration
+
+Merchants can subscribe to specific events via webhook endpoints:
+
+```json
+{
+  "webhook_url": "https://merchant.example.com/webhooks/infinite",
+  "events": [
+    "payment.collected",
+    "onramp.converted", 
+    "custody.transferred",
+    "payout.completed",
+    "payment.completed"
+  ],
+  "secret": "whsec_1234567890abcdef"
+}
+```
 
 ## Regulatory Notes
 - **Co-mingling of Funds**: The custody wallet (`CUSTODY_WALLET`) will hold funds from multiple merchants and payers. This is a serious risk for regulatory compliance, especially in terms of KYC/AML regulations. In a production system, it would be advisable to have separate custody wallets for each merchant or recipient bank to mitigate this risk.
