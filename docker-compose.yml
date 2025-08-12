@@ -4,9 +4,9 @@ services:
   infinite-onramp:
     build: ./onramp-service
     container_name: infinite-onramp
-    command: bash -c "flask run --with-threads --host=0.0.0.0 --port=8081 --debugger --reload"
+    command: bash -c "flask run --with-threads --host=0.0.0.0 --port=8080 --debugger --reload"
     ports:
-      - "8081:8081"
+      - "8080:8080"
     volumes:
       - ./onramp-service:/app
     env_file:
@@ -21,9 +21,9 @@ services:
   infinite-offramp:
     build: ./offramp-service
     container_name: infinite-offramp
-    command: bash -c "flask run --with-threads --host=0.0.0.0 --port=8080 --debugger --reload"
+    command: bash -c "flask run --with-threads --host=0.0.0.0 --port=20001 --debugger --reload"
     ports:
-      - "8080:8080"
+      - "20001:20001"
     volumes:
       - ./offramp-service:/app
     env_file:
