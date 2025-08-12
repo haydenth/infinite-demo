@@ -9,6 +9,7 @@ import uuid
 import time
 from datetime import datetime
 import logging
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,13 +17,85 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Mock exchange rates (in production this would come from real rate feeds)
-EXCHANGE_RATES = {
+# ExchangeRate-API configuration
+EXCHANGE_RATE_API_KEY = 'e1c8fbbbfb3eb2c66537bc91'
+EXCHANGE_RATE_API_URL = f'https://v6.exchangerate-api.com/v6/{EXCHANGE_RATE_API_KEY}/latest/USD'
+
+# Fallback mock exchange rates (used if API fails)
+FALLBACK_EXCHANGE_RATES = {
     'USDC_EUR': 0.86000,  # 1 USDC = 0.86 EUR (includes spread and provider fees)
     'USDC_USD': 1.00000,
     'USDC_GBP': 0.77000,
     'USDC_CAD': 1.25000,
 }
+
+# Cache for exchange rates (to avoid hitting the API on every request)
+EXCHANGE_RATES_CACHE = {
+    'rates': None,
+    'timestamp': None,
+    'cache_duration': 300  # 5 minutes
+}
+
+def fetch_live_exchange_rates():
+    """Fetch live exchange rates from ExchangeRate-API"""
+    try:
+        response = requests.get(EXCHANGE_RATE_API_URL, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        if data.get('result') == 'success':
+            conversion_rates = data.get('conversion_rates', {})
+            
+            # Convert to our format (USDC_XXX) and add spread/fees
+            # For simplicity, assuming USDC = USD with a small spread
+            formatted_rates = {}
+            spread_factor = 0.995  # 0.5% spread/fee
+            
+            for currency, rate in conversion_rates.items():
+                key = f'USDC_{currency}'
+                # Apply spread - we pay slightly less than market rate
+                formatted_rates[key] = round(rate * spread_factor, 6)
+            
+            # Cache the rates
+            EXCHANGE_RATES_CACHE['rates'] = formatted_rates
+            EXCHANGE_RATES_CACHE['timestamp'] = time.time()
+            
+            logger.info(f"Successfully fetched live exchange rates for {len(formatted_rates)} currencies")
+            return formatted_rates
+            
+        else:
+            logger.warning(f"ExchangeRate-API returned error: {data}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to fetch live exchange rates: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error fetching exchange rates: {e}")
+        return None
+
+def get_cached_exchange_rates():
+    """Get exchange rates from cache or fetch fresh ones"""
+    current_time = time.time()
+    
+    # Check if we have cached rates and they're still fresh
+    if (EXCHANGE_RATES_CACHE['rates'] is not None and 
+        EXCHANGE_RATES_CACHE['timestamp'] is not None and
+        current_time - EXCHANGE_RATES_CACHE['timestamp'] < EXCHANGE_RATES_CACHE['cache_duration']):
+        
+        logger.info("Using cached exchange rates")
+        return EXCHANGE_RATES_CACHE['rates'], 'cached'
+    
+    # Try to fetch fresh rates
+    logger.info("Fetching fresh exchange rates...")
+    live_rates = fetch_live_exchange_rates()
+    
+    if live_rates:
+        return live_rates, 'live'
+    else:
+        # Fall back to hardcoded rates
+        logger.warning("Falling back to hardcoded exchange rates")
+        return FALLBACK_EXCHANGE_RATES, 'fallback'
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -36,10 +109,14 @@ def health_check():
 @app.route('/exchange-rates', methods=['GET'])
 def get_exchange_rates():
     """Get current exchange rates"""
+    rates, source = get_cached_exchange_rates()
+    
     return jsonify({
-        'rates': EXCHANGE_RATES,
+        'rates': rates,
         'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'base_currency': 'USDC'
+        'base_currency': 'USDC',
+        'source': source,  # 'live', 'cached', or 'fallback'
+        'cache_duration_seconds': EXCHANGE_RATES_CACHE['cache_duration']
     }), 200
 
 @app.route('/payout', methods=['POST'])
@@ -81,12 +158,15 @@ def process_payout():
         target_currency = data['target_currency'].upper()
         reference = data.get('reference', f'payout_{int(time.time())}')
         
+        # Get current exchange rates
+        exchange_rates, _ = get_cached_exchange_rates()
+        
         # Validate currency support
         rate_key = f'USDC_{target_currency}'
-        if rate_key not in EXCHANGE_RATES:
+        if rate_key not in exchange_rates:
             return jsonify({
                 'error': 'unsupported_currency',
-                'supported_currencies': list([key.split('_')[1] for key in EXCHANGE_RATES.keys()]),
+                'supported_currencies': list([key.split('_')[1] for key in exchange_rates.keys()]),
                 'requested_currency': target_currency
             }), 400
         
@@ -101,7 +181,7 @@ def process_payout():
         time.sleep(0.5)  # Mock network/processing time
         
         # Calculate conversion
-        exchange_rate = EXCHANGE_RATES[rate_key]
+        exchange_rate = exchange_rates[rate_key]
         final_amount = round(usdc_amount * exchange_rate, 2)
         
         # Generate mock transaction IDs

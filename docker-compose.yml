@@ -1,16 +1,54 @@
 version: '3.8'
 
 services:
-  offramp-service:
-    build: ./offramp-service
-    container_name: offramp-service
+  infinite-onramp:
+    build: ./onramp-service
+    container_name: infinite-onramp
+    command: bash -c "flask run --with-threads --host=0.0.0.0 --port=8081 --debugger --reload"
     ports:
-      - "8080:8080"
-    environment:
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
+      - "8081:8081"
+    volumes:
+      - ./onramp-service:/app
+    env_file:
+      - env_vars
     networks:
       - infinite-network
+    stdin_open: true
+    tty: true
+    depends_on:
+      - infinite-postgres
+
+  infinite-offramp:
+    build: ./offramp-service
+    container_name: infinite-offramp
+    command: bash -c "flask run --with-threads --host=0.0.0.0 --port=8080 --debugger --reload"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./offramp-service:/app
+    env_file:
+      - env_vars
+    networks:
+      - infinite-network
+    stdin_open: true
+    tty: true
+    depends_on:
+      - infinite-postgres
+
+  infinite-postgres:
+    image: postgres:16
+    container_name: infinite-postgres
+    ports:
+      - "5432:5432"
+    env_file:
+      - env_vars
+    volumes:
+      - infinite_postgres_data:/var/lib/postgresql/data
+    networks:
+      - infinite-network
+
+volumes:
+  infinite_postgres_data:
 
 networks:
   infinite-network:

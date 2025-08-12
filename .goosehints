@@ -24,3 +24,7 @@ We're Evaluating:
 Files:
 - offramp-service: this is the mocked out offramp service
 - offramp-service/README.md: details on how to use the mocked offramp service
+
+Testing:
+- Don't run flask yourself, it's all in the docker-compose.yml and I will run
+- Don't worry about testing, I will take care of testing

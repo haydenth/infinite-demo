@@ -1,0 +1,38 @@
+# Flask Configuration
+FLASK_APP=app
+FLASK_DEBUG=1
+FLASK_ENV=development
+
+# PostgreSQL Configuration
+POSTGRES_USER=infinite_user
+POSTGRES_DB=infinite_dev
+POSTGRES_PASSWORD=infinite_password_123
+POSTGRES_HOST=infinite-postgres
+POSTGRES_PORT=5432
+
+# Application Configuration
+PRODUCTION=0
+FORCE_SSL=FALSE
+SQLALCHEMY_TRACK_MODIFICATIONS=FALSE
+OAUTHLIB_INSECURE_TRANSPORT=1
+
+# Service URLs (Internal - container to container communication)
+ONRAMP_SERVICE_URL=http://infinite-onramp:8081
+OFFRAMP_SERVICE_URL=http://infinite-offramp:8080
+
+# Service URLs (External - for client access)
+EXTERNAL_ONRAMP_SERVICE_URL=http://localhost:8081
+EXTERNAL_OFFRAMP_SERVICE_URL=http://localhost:8080
+
+# Exchange Rate Configuration
+EXCHANGE_RATE_REFRESH_INTERVAL=300
+EXCHANGE_RATE_PROVIDER=mock
+
+# Payment Processing Configuration
+PAYMENT_TIMEOUT_SECONDS=30
+MAX_PAYMENT_AMOUNT_USD=10000
+MIN_PAYMENT_AMOUNT_USD=1
+
+# Security Configuration
+JWT_SECRET_KEY=infinite_dev_jwt_secret_key_change_in_production
+API_RATE_LIMIT=100
