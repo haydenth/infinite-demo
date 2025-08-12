@@ -3,9 +3,648 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Onramp Service</title>
+    <title>Onramp Service - Cross-Border Payment API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body>
-    
+<body class="bg-gray-100" x-data="{ activeTab: 'invoices', sidebarOpen: true }">
+    <div class="flex min-h-screen">
+        <!-- Sidebar Navigation -->
+        <div class="bg-slate-900 text-white transition-all duration-300" :class="sidebarOpen ? 'w-64' : 'w-16'">
+            <div class="p-4">
+                <!-- Logo/Header -->
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center" :class="!sidebarOpen && 'justify-center'">
+                        <i class="fas fa-coins text-2xl text-blue-400"></i>
+                        <h1 x-show="sidebarOpen" class="ml-3 text-xl font-bold transition-all duration-300">Onramp Service</h1>
+                    </div>
+                    <button @click="sidebarOpen = !sidebarOpen" class="text-gray-300 hover:text-white">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+
+                <!-- Navigation Menu -->
+                <nav class="space-y-2">
+
+                    <button @click="activeTab = 'invoices'" 
+                            class="w-full flex items-center px-4 py-3 rounded-lg transition-colors"
+                            :class="activeTab === 'invoices' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-slate-800 hover:text-white'">
+                        <i class="fas fa-file-invoice w-5 text-center"></i>
+                        <span x-show="sidebarOpen" class="ml-3">Invoices</span>
+                    </button>
+
+                    <button @click="activeTab = 'transactions'" 
+                            class="w-full flex items-center px-4 py-3 rounded-lg transition-colors"
+                            :class="activeTab === 'transactions' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-slate-800 hover:text-white'">
+                        <i class="fas fa-list w-5 text-center"></i>
+                        <span x-show="sidebarOpen" class="ml-3">Transactions</span>
+                    </button>
+
+                    <button @click="activeTab = 'rates'" 
+                            class="w-full flex items-center px-4 py-3 rounded-lg transition-colors"
+                            :class="activeTab === 'rates' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-slate-800 hover:text-white'">
+                        <i class="fas fa-exchange-alt w-5 text-center"></i>
+                        <span x-show="sidebarOpen" class="ml-3">Exchange Rates</span>
+                    </button>
+
+                    <button @click="activeTab = 'webhooks'" 
+                            class="w-full flex items-center px-4 py-3 rounded-lg transition-colors"
+                            :class="activeTab === 'webhooks' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-slate-800 hover:text-white'">
+                        <i class="fas fa-webhook w-5 text-center"></i>
+                        <span x-show="sidebarOpen" class="ml-3">Webhooks</span>
+                    </button>
+
+
+                </nav>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 overflow-hidden">
+            <!-- Top Header Bar -->
+            <div class="bg-white shadow-sm border-b px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-2xl font-bold text-gray-800" x-text="activeTab.charAt(0).toUpperCase() + activeTab.slice(1)"></h2>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center text-sm text-gray-500">
+                            <i class="fas fa-circle text-green-500 mr-2"></i>
+                            Service Online
+                        </div>
+                        <div class="text-sm text-gray-500">
+                            <i class="fas fa-clock mr-1"></i>
+                            <span id="current-time"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="p-6 h-full overflow-y-auto">
+                <!-- Payment Content -->
+                <div x-show="activeTab === 'payment'" class="max-w-2xl">
+                    <div class="bg-white p-6 rounded-lg shadow-sm border">
+                        <h3 class="text-lg font-medium text-gray-900 mb-6">Process USD Payment</h3>
+                        <form id="payment-form" class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Amount (USD)</label>
+                                    <input type="number" step="0.01" placeholder="1000.00" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+                                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                        <option value="card">Credit Card</option>
+                                        <option value="bank">Bank Transfer</option>
+                                        <option value="ach">ACH</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Customer Email</label>
+                                <input type="email" placeholder="customer@example.com" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Webhook URL (Optional)</label>
+                                <input type="url" placeholder="https://api.example.com/webhooks/onramp" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <h4 class="font-medium text-blue-900 mb-2">Conversion Preview</h4>
+                                <div class="text-sm text-blue-800">
+                                    <p>Exchange Rate: 1 USD = 0.995 USDC</p>
+                                    <p>Processing Fee: 2.9% + $0.30</p>
+                                    <p class="font-medium mt-2">You will receive: ~0 USDC</p>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                                <i class="fas fa-credit-card mr-2"></i>
+                                Process Payment
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Other content sections will be added as needed -->
+                <div x-show="activeTab === 'transactions'" class="bg-white p-6 rounded-lg shadow-sm border">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Transaction History</h3>
+                    <p class="text-gray-500">Transaction history functionality coming soon...</p>
+                </div>
+
+                <div x-show="activeTab === 'rates'" class="space-y-6" x-data="{
+                    exchangeRates: {}, 
+                    loading: false, 
+                    calculatorResult: null,
+                    calculatorLoading: false,
+                    error: null,
+                    calculator: {
+                        amount: '',
+                        fromCurrency: 'USDC',
+                        toCurrency: 'EUR'
+                    },
+                    
+                    async fetchExchangeRates() {
+                        this.loading = true;
+                        this.error = null;
+                        
+                        try {
+                            const response = await fetch('http://localhost:20001/exchange-rates');
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            const data = await response.json();
+                            this.exchangeRates = data.exchange_rates;
+                            
+                            // Update the exchange rates grid
+                            const grid = document.getElementById('exchange-rates-grid');
+                            grid.innerHTML = '';
+                            
+                            Object.entries(data.exchange_rates).forEach(([pair, rate]) => {
+                                const [from, to] = pair.split('_');
+                                const rateCard = document.createElement('div');
+                                rateCard.className = 'p-4 bg-gray-50 rounded-lg';
+                                rateCard.innerHTML = `
+                                    <div class='flex justify-between items-center'>
+                                        <span class='font-medium'>${from} → ${to}</span>
+                                        <span class='text-lg font-bold text-green-600'>${rate.toFixed(4)}</span>
+                                    </div>
+                                `;
+                                grid.appendChild(rateCard);
+                            });
+                        } catch (error) {
+                            console.error('Error fetching exchange rates:', error);
+                            this.error = 'Failed to fetch exchange rates. Make sure the offramp service is running.';
+                            
+                            // Show fallback static rates
+                            const grid = document.getElementById('exchange-rates-grid');
+                            grid.innerHTML = `
+                                <div class='p-4 bg-gray-50 rounded-lg'>
+                                    <div class='flex justify-between items-center'>
+                                        <span class='font-medium'>USDC → EUR</span>
+                                        <span class='text-lg font-bold text-gray-500'>0.8600</span>
+                                    </div>
+                                </div>
+                                <div class='p-4 bg-gray-50 rounded-lg'>
+                                    <div class='flex justify-between items-center'>
+                                        <span class='font-medium'>USDC → USD</span>
+                                        <span class='text-lg font-bold text-gray-500'>0.9950</span>
+                                    </div>
+                                </div>
+                                <div class='p-4 bg-gray-50 rounded-lg'>
+                                    <div class='flex justify-between items-center'>
+                                        <span class='font-medium'>USDC → GBP</span>
+                                        <span class='text-lg font-bold text-gray-500'>0.7700</span>
+                                    </div>
+                                </div>
+                            `;
+                        } finally {
+                            this.loading = false;
+                        }
+                    },
+                    
+                    async calculateConversion() {
+                        this.calculatorLoading = true;
+                        this.calculatorResult = null;
+                        this.error = null;
+                        
+                        try {
+                            // First get exchange rates
+                            const ratesResponse = await fetch('http://localhost:20001/exchange-rates');
+                            if (!ratesResponse.ok) {
+                                throw new Error(`HTTP error! status: ${ratesResponse.status}`);
+                            }
+                            const ratesData = await ratesResponse.json();
+                            
+                            // Find the appropriate exchange rate
+                            const fromCurrency = this.calculator.fromCurrency;
+                            const toCurrency = this.calculator.toCurrency;
+                            const amount = parseFloat(this.calculator.amount);
+                            
+                            let exchangeRate = 1;
+                            let convertedAmount = amount;
+                            
+                            // Handle different conversion scenarios
+                            const ratePair = `${fromCurrency}_${toCurrency}`;
+                            const reversePair = `${toCurrency}_${fromCurrency}`;
+                            
+                            if (ratesData.exchange_rates[ratePair]) {
+                                exchangeRate = ratesData.exchange_rates[ratePair];
+                                convertedAmount = amount * exchangeRate;
+                            } else if (ratesData.exchange_rates[reversePair]) {
+                                exchangeRate = 1 / ratesData.exchange_rates[reversePair];
+                                convertedAmount = amount * exchangeRate;
+                            } else if (fromCurrency === toCurrency) {
+                                exchangeRate = 1;
+                                convertedAmount = amount;
+                            } else {
+                                // Try to find indirect conversion through USDC
+                                const fromToUSDC = ratesData.exchange_rates[`${fromCurrency}_USDC`] || (ratesData.exchange_rates[`USDC_${fromCurrency}`] ? 1 / ratesData.exchange_rates[`USDC_${fromCurrency}`] : null);
+                                const usdcToTarget = ratesData.exchange_rates[`USDC_${toCurrency}`] || (ratesData.exchange_rates[`${toCurrency}_USDC`] ? 1 / ratesData.exchange_rates[`${toCurrency}_USDC`] : null);
+                                
+                                if (fromToUSDC && usdcToTarget) {
+                                    exchangeRate = fromToUSDC * usdcToTarget;
+                                    convertedAmount = amount * exchangeRate;
+                                } else {
+                                    throw new Error(`No exchange rate found for ${fromCurrency} to ${toCurrency}`);
+                                }
+                            }
+                            
+                            this.calculatorResult = {
+                                fromAmount: amount.toFixed(2),
+                                fromCurrency: fromCurrency,
+                                toAmount: convertedAmount.toFixed(2),
+                                toCurrency: toCurrency,
+                                exchangeRate: exchangeRate.toFixed(6),
+                                fees: true
+                            };
+                            
+                        } catch (error) {
+                            console.error('Error calculating conversion:', error);
+                            this.error = 'Failed to calculate conversion: ' + error.message;
+                        } finally {
+                            this.calculatorLoading = false;
+                        }
+                    }
+                }">
+                    <!-- Currency Converter -->
+                    <div class="bg-white p-6 rounded-lg shadow-sm border">
+                        <h3 class="text-lg font-medium text-gray-900 mb-6">Currency Converter</h3>
+                        
+                        <form @submit.prevent="calculateConversion()" class="space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                                    <input type="number" 
+                                           step="0.01" 
+                                           x-model="calculator.amount"
+                                           placeholder="100.00"
+                                           required
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">From Currency</label>
+                                    <select x-model="calculator.fromCurrency"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                        <option value="USDC">USDC</option>
+                                        <option value="EUR">EUR</option>
+                                        <option value="USD">USD</option>
+                                        <option value="GBP">GBP</option>
+                                        <option value="CAD">CAD</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">To Currency</label>
+                                    <select x-model="calculator.toCurrency"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                        <option value="EUR">EUR</option>
+                                        <option value="USD">USD</option>
+                                        <option value="GBP">GBP</option>
+                                        <option value="CAD">CAD</option>
+                                        <option value="USDC">USDC</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" 
+                                    class="w-full md:w-auto px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                                    :disabled="calculatorLoading || !calculator.amount">
+                                <i class="fas fa-calculator mr-2" :class="calculatorLoading && 'animate-spin'"></i>
+                                <span x-text="calculatorLoading ? 'Calculating...' : 'Convert Currency'"></span>
+                            </button>
+                        </form>
+                        
+                        <!-- Conversion Result -->
+                        <div x-show="calculatorResult" class="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <h4 class="font-medium text-green-900 mb-2">Conversion Result</h4>
+                            <div class="text-green-800">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span>Amount:</span>
+                                    <span class="font-bold" x-text="calculatorResult?.fromAmount + ' ' + calculatorResult?.fromCurrency"></span>
+                                </div>
+                                <div class="flex justify-between items-center mb-2">
+                                    <span>Exchange Rate:</span>
+                                    <span class="font-bold" x-text="calculatorResult?.exchangeRate"></span>
+                                </div>
+                                <div class="flex justify-between items-center text-lg">
+                                    <span>Converted Amount:</span>
+                                    <span class="font-bold" x-text="calculatorResult?.toAmount + ' ' + calculatorResult?.toCurrency"></span>
+                                </div>
+                                <div x-show="calculatorResult?.fees" class="text-sm text-green-600 mt-2">
+                                    <span>* Includes conversion fees and spread</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="activeTab === 'webhooks'" class="bg-white p-6 rounded-lg shadow-sm border">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Webhook Configuration</h3>
+                    <p class="text-gray-500">Webhook management functionality coming soon...</p>
+                </div>
+
+                <!-- Invoices Tab -->
+                <div x-show="activeTab === 'invoices'" class="space-y-6" x-data="{
+                    invoices: [
+                        {
+                            id: 'INV-001',
+                            customerEmail: 'john.doe@example.com',
+                            amount: 1500.00,
+                            currency: 'USD',
+                            status: 'paid',
+                            createdDate: '2024-08-10',
+                            paidDate: '2024-08-10',
+                            description: 'Cross-border payment for EUR payout'
+                        },
+                        {
+                            id: 'INV-002',
+                            customerEmail: 'jane.smith@company.com',
+                            amount: 750.50,
+                            currency: 'USD',
+                            status: 'pending',
+                            createdDate: '2024-08-11',
+                            paidDate: null,
+                            description: 'Payment for GBP conversion'
+                        },
+                        {
+                            id: 'INV-003',
+                            customerEmail: 'bob.wilson@startup.io',
+                            amount: 2250.00,
+                            currency: 'USD',
+                            status: 'overdue',
+                            createdDate: '2024-08-08',
+                            paidDate: null,
+                            description: 'Bulk payment processing'
+                        },
+                        {
+                            id: 'INV-004',
+                            customerEmail: 'alice.brown@enterprise.com',
+                            amount: 500.00,
+                            currency: 'USD',
+                            status: 'paid',
+                            createdDate: '2024-08-12',
+                            paidDate: '2024-08-12',
+                            description: 'Express payment to CAD'
+                        }
+                    ],
+                    showCreateModal: false,
+                    newInvoice: {
+                        customerEmail: '',
+                        amount: '',
+                        currency: 'USD',
+                        description: '',
+                        dueDate: ''
+                    },
+                    
+                    getStatusColor(status) {
+                        switch(status) {
+                            case 'paid': return 'text-green-800 bg-green-100';
+                            case 'pending': return 'text-yellow-800 bg-yellow-100';
+                            case 'overdue': return 'text-red-800 bg-red-100';
+                            default: return 'text-gray-800 bg-gray-100';
+                        }
+                    },
+                    
+                    createInvoice() {
+                        const newId = 'INV-' + String(this.invoices.length + 1).padStart(3, '0');
+                        const today = new Date().toISOString().split('T')[0];
+                        
+                        this.invoices.unshift({
+                            id: newId,
+                            customerEmail: this.newInvoice.customerEmail,
+                            amount: parseFloat(this.newInvoice.amount),
+                            currency: this.newInvoice.currency,
+                            status: 'pending',
+                            createdDate: today,
+                            paidDate: null,
+                            description: this.newInvoice.description
+                        });
+                        
+                        // Reset form
+                        this.newInvoice = {
+                            customerEmail: '',
+                            amount: '',
+                            currency: 'USD',
+                            description: '',
+                            dueDate: ''
+                        };
+                        this.showCreateModal = false;
+                    }
+                }">
+                    <!-- Create Invoice Button -->
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-medium text-gray-900">Invoice Management</h3>
+                        <button @click="showCreateModal = true" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>
+                            Create Invoice
+                        </button>
+                    </div>
+
+                    <!-- Invoices List -->
+                    <div class="bg-white rounded-lg shadow-sm border">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <div class="flex justify-between items-center">
+                                <h4 class="text-lg font-medium text-gray-900">Recent Invoices</h4>
+                                <div class="text-sm text-gray-500">
+                                    <span x-text="invoices.length"></span> total invoices
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice ID</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <template x-for="invoice in invoices" :key="invoice.id">
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="invoice.id"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="invoice.customerEmail"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                $<span x-text="invoice.amount.toFixed(2)"></span> <span x-text="invoice.currency"></span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full capitalize"
+                                                      :class="getStatusColor(invoice.status)"
+                                                      x-text="invoice.status"></span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="invoice.createdDate"></td>
+                                            <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" x-text="invoice.description"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <button class="text-blue-600 hover:text-blue-900 mr-3">View</button>
+                                                <button class="text-gray-600 hover:text-gray-900">Download</button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Create Invoice Modal -->
+                    <div x-show="showCreateModal" 
+                         x-transition:enter="ease-out duration-300"
+                         x-transition:enter-start="opacity-0"
+                         x-transition:enter-end="opacity-100"
+                         x-transition:leave="ease-in duration-200"
+                         x-transition:leave-start="opacity-100"
+                         x-transition:leave-end="opacity-0"
+                         class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+                         style="display: none;">
+                        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                            <div class="mt-3">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Create New Invoice</h3>
+                                    <button @click="showCreateModal = false" class="text-gray-400 hover:text-gray-600">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                
+                                <form @submit.prevent="createInvoice()" class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Customer Email</label>
+                                        <input type="email" 
+                                               x-model="newInvoice.customerEmail"
+                                               required
+                                               placeholder="customer@example.com"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                                            <input type="number" 
+                                                   step="0.01"
+                                                   x-model="newInvoice.amount"
+                                                   required
+                                                   placeholder="1000.00"
+                                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                                            <select x-model="newInvoice.currency"
+                                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                                <option value="USD">USD</option>
+                                                <option value="EUR">EUR</option>
+                                                <option value="GBP">GBP</option>
+                                                <option value="CAD">CAD</option>
+                                                <option value="USDC">USDC</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                                        <textarea x-model="newInvoice.description"
+                                                  required
+                                                  placeholder="Payment description..."
+                                                  rows="3"
+                                                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                                    </div>
+                                    
+                                    <div class="flex justify-end space-x-3 pt-4">
+                                        <button type="button" 
+                                                @click="showCreateModal = false"
+                                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                                            Cancel
+                                        </button>
+                                        <button type="submit"
+                                                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">
+                                            <i class="fas fa-plus mr-2"></i>
+                                            Create Invoice
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Invoice Statistics -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-lg border shadow-sm">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-file-invoice text-blue-600 text-xl"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium text-gray-500">Total Invoices</p>
+                                    <p class="text-2xl font-semibold text-gray-900" x-text="invoices.length"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white p-4 rounded-lg border shadow-sm">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium text-gray-500">Paid</p>
+                                    <p class="text-2xl font-semibold text-gray-900" x-text="invoices.filter(i => i.status === 'paid').length"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white p-4 rounded-lg border shadow-sm">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-clock text-yellow-600 text-xl"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium text-gray-500">Pending</p>
+                                    <p class="text-2xl font-semibold text-gray-900" x-text="invoices.filter(i => i.status === 'pending').length"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white p-4 rounded-lg border shadow-sm">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium text-gray-500">Overdue</p>
+                                    <p class="text-2xl font-semibold text-gray-900" x-text="invoices.filter(i => i.status === 'overdue').length"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString();
+        }
+        
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // Form handling
+        document.getElementById('payment-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Payment processing functionality would be implemented here!');
+        });
+    </script>
 </body>
 </html>

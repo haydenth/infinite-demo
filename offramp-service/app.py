@@ -5,6 +5,7 @@ Simulates a service that converts USDC to EUR and deposits to bank accounts
 """
 
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import uuid
 import time
 from datetime import datetime
@@ -16,6 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+CORS(app)
 
 # ExchangeRate-API configuration
 EXCHANGE_RATE_API_KEY = 'e1c8fbbbfb3eb2c66537bc91'
@@ -112,7 +114,7 @@ def get_exchange_rates():
     rates, source = get_cached_exchange_rates()
     
     return jsonify({
-        'rates': rates,
+        'exchange_rates': rates,
         'timestamp': datetime.utcnow().isoformat() + 'Z',
         'base_currency': 'USDC',
         'source': source,  # 'live', 'cached', or 'fallback'

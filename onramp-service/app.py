@@ -4,18 +4,36 @@ Mock Onramp Service - USD Collection & USDC Conversion
 Simulates a service that collects USD and converts to USDC
 """
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask_migrate import Migrate
 import uuid
 import time
 from datetime import datetime
 import logging
 import os
 
+# Import models
+from models import db
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# Database configuration
+postgres_user = os.environ.get('POSTGRES_USER', 'postgres')
+postgres_pass = os.environ.get('POSTGRES_PASSWORD', 'password')
+postgres_db = os.environ.get('POSTGRES_DB', 'infinite_dev')
+postgres_host = os.environ.get('POSTGRES_HOST', 'infinite-postgres')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{postgres_user}:{postgres_pass}@{postgres_host}:5432/{postgres_db}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Initialize database and migration
+db.init_app(app)
+migrate = Migrate(app, db)
 
 # Mock exchange rates (in production this would come from real rate feeds)
 EXCHANGE_RATES = {
@@ -27,8 +45,17 @@ EXCHANGE_RATES = {
 
 @app.route('/', methods=['GET'])
 def serve_index():
-    """Serve the index.html file"""
-    return send_from_directory('.', 'index.html')
+    """Serve the index.html file with environment variables injected"""
+    external_offramp_url = os.getenv('EXTERNAL_OFFRAMP_SERVICE_URL', 'http://localhost:20001')
+    
+    # Read the HTML file
+    with open('index.html', 'r') as f:
+        html_content = f.read()
+    
+    # Replace the hardcoded URL with the environment variable
+    html_content = html_content.replace('http://localhost:20001', external_offramp_url)
+    
+    return html_content
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -112,8 +139,34 @@ def process_collection():
         transaction_id = f'tx_{uuid.uuid4().hex[:12]}'
         payment_reference = f'pay_ref_{uuid.uuid4().hex[:12]}'
         
+        # Get card last four for logging
+        card_last_four = None
+        if payment_method in ['credit_card', 'debit_card']:
+            card_last_four = data.get('card_number', '')[-4:] if data.get('card_number') else None
+        
         logger.info(f"Processing collection: {usd_amount} USD -> {usdc_amount} USDC")
         logger.info(f"Wallet: {wallet_address[:10]}...{wallet_address[-6:]}")
+        
+        # Save payment to database
+        from models import Payment
+        payment = Payment(
+            transaction_id=transaction_id,
+            reference=reference,
+            payment_method=payment_method,
+            card_last_four=card_last_four,
+            payment_reference=payment_reference,
+            usd_amount=usd_amount,
+            usdc_amount=usdc_amount,
+            exchange_rate=exchange_rate,
+            wallet_address=wallet_address,
+            status='completed',
+            processed_at=datetime.utcnow()
+        )
+        
+        db.session.add(payment)
+        db.session.commit()
+        
+        logger.info(f"Payment saved to database with ID: {payment.id}")
         
         # Mock successful response
         response = {
@@ -126,7 +179,7 @@ def process_collection():
             'wallet_address': wallet_address,
             'payment_details': {
                 'payment_reference': payment_reference,
-                'card_last_four': data.get('card_number', '')[-4:] if payment_method in ['credit_card', 'debit_card'] else None
+                'card_last_four': card_last_four
             },
             'reference': reference,
             'processed_at': datetime.utcnow().isoformat() + 'Z',
@@ -148,6 +201,46 @@ def process_collection():
             'error': 'internal_server_error',
             'message': 'An unexpected error occurred'
         }), 500
+
+@app.route('/payments', methods=['GET'])
+def list_payments():
+    """Get list of all payments with optional filtering"""
+    from models import Payment
+    
+    # Query parameters for filtering
+    status = request.args.get('status')
+    payment_method = request.args.get('payment_method')
+    limit = min(int(request.args.get('limit', 100)), 1000)  # Max 1000 records
+    
+    query = Payment.query
+    
+    if status:
+        query = query.filter(Payment.status == status)
+    if payment_method:
+        query = query.filter(Payment.payment_method == payment_method)
+    
+    payments = query.order_by(Payment.created_at.desc()).limit(limit).all()
+    
+    return jsonify({
+        'payments': [payment.to_dict() for payment in payments],
+        'count': len(payments),
+        'total_count': Payment.query.count()
+    }), 200
+
+@app.route('/payments/<transaction_id>', methods=['GET'])
+def get_payment(transaction_id):
+    """Get a specific payment by transaction ID"""
+    from models import Payment
+    
+    payment = Payment.query.filter_by(transaction_id=transaction_id).first()
+    
+    if not payment:
+        return jsonify({
+            'error': 'payment_not_found',
+            'message': f'No payment found with transaction ID: {transaction_id}'
+        }), 404
+    
+    return jsonify(payment.to_dict()), 200
 
 @app.route('/collect/simulate-failure', methods=['POST'])
 def simulate_failure():
@@ -196,6 +289,8 @@ if __name__ == '__main__':
     logger.info("  GET  /health - Health check")
     logger.info("  GET  /exchange-rates - Current exchange rates")
     logger.info("  POST /collect - Process USD collection and convert to USDC")
+    logger.info("  GET  /payments - List all payments (with filtering)")
+    logger.info("  GET  /payments/<id> - Get specific payment by transaction ID")
     logger.info("  POST /collect/simulate-failure - Simulate failure scenarios")
     
-    app.run(host='0.0.0.0', port=8081, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)

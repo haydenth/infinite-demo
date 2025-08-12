@@ -17,12 +17,12 @@ SQLALCHEMY_TRACK_MODIFICATIONS=FALSE
 OAUTHLIB_INSECURE_TRANSPORT=1
 
 # Service URLs (Internal - container to container communication)
-ONRAMP_SERVICE_URL=http://infinite-onramp:8081
-OFFRAMP_SERVICE_URL=http://infinite-offramp:8080
+ONRAMP_SERVICE_URL=http://infinite-onramp:8080
+OFFRAMP_SERVICE_URL=http://infinite-offramp:20001
 
 # Service URLs (External - for client access)
-EXTERNAL_ONRAMP_SERVICE_URL=http://localhost:8081
-EXTERNAL_OFFRAMP_SERVICE_URL=http://localhost:8080
+EXTERNAL_ONRAMP_SERVICE_URL=http://localhost:8080
+EXTERNAL_OFFRAMP_SERVICE_URL=http://localhost:20001
 
 # Exchange Rate Configuration
 EXCHANGE_RATE_REFRESH_INTERVAL=300
@@ -36,3 +36,6 @@ MIN_PAYMENT_AMOUNT_USD=1
 # Security Configuration
 JWT_SECRET_KEY=infinite_dev_jwt_secret_key_change_in_production
 API_RATE_LIMIT=100
+
+STRIPE_PK=pk_test_51RvMfkGviLGbhFPm3pBpZaX5hvDgHr8iGyqeOvU1eMukRu4djUAt5wXKZuGkL1sZTJwcwaXuccDU3j0jxFnU5pZI00CC9NNIuv
+STRIPE_SK=sk_test_51RvMfkGviLGbhFPmLKK8A9TJ3B2COUNFEdQA1ZISSA3Y8a4XNJSdhneHq5aFgXY4Btchm6mTKpF9OcdPtkxynHtr00UpV28V2v

@@ -4,7 +4,7 @@ services:
   infinite-onramp:
     build: ./onramp-service
     container_name: infinite-onramp
-    command: bash -c "flask run --with-threads --host=0.0.0.0 --port=8080 --debugger --reload"
+    command: bash ./init_db.sh
     ports:
       - "8080:8080"
     volumes:
